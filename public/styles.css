@@ -724,6 +724,114 @@ body {
   transition: width 0.3s;
 }
 
+.compare-section {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  margin-bottom: 24px;
+}
+
+.compare-header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #a5d6a7;
+}
+
+.compare-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.compare-card {
+  background: linear-gradient(135deg, #f5f5f5 0%, #e8f5e9 100%);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  transition: transform 0.3s, box-shadow 0.3s;
+  border: 1px solid #e0e0e0;
+}
+
+.compare-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.compare-card-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 16px;
+}
+
+.compare-card-values {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.compare-year-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.compare-year-label {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 4px;
+}
+
+.compare-year-value {
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.compare-year-value.last-year {
+  color: #ff9800;
+}
+
+.compare-year-value.current-year {
+  color: #4caf50;
+}
+
+.compare-vs {
+  font-size: 14px;
+  font-weight: bold;
+  color: #999;
+  background: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.compare-diff {
+  font-size: 14px;
+  font-weight: bold;
+  padding: 6px 12px;
+  border-radius: 16px;
+  display: inline-block;
+}
+
+.compare-diff-up {
+  color: #4caf50;
+  background: #e8f5e9;
+}
+
+.compare-diff-down {
+  color: #f44336;
+  background: #ffebee;
+}
+
+.compare-diff-same {
+  color: #999;
+  background: #f5f5f5;
+}
+
 @media (max-width: 768px) {
   .sidebar {
     width: 60px;
@@ -741,5 +849,9 @@ body {
   
   .page-title {
     font-size: 22px;
+  }
+  
+  .compare-summary-grid {
+    grid-template-columns: 1fr;
   }
 }

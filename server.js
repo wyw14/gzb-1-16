@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3036;
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -398,6 +398,94 @@ app.get('/api/statistics', (req, res) => {
     difficultyStats,
     careTypeStats,
     monthlyStats
+  });
+});
+
+app.get('/api/report/yearly-comparison', (req, res) => {
+  const { year } = req.query;
+  const targetYear = year ? parseInt(year) : new Date().getFullYear();
+  const compareYear = targetYear - 1;
+
+  const buildYearSummary = (yr) => {
+    const plants = readJSON('plants.json');
+    const careRecords = readJSON('care-records.json');
+    const photos = readJSON('photos.json');
+
+    const startDate = new Date(yr, 0, 1);
+    const endDate = new Date(yr + 1, 0, 1);
+
+    const yearPlants = plants.filter(p => new Date(p.createdAt) < endDate);
+    const yearRecords = careRecords.filter(r => {
+      const d = new Date(r.date);
+      return d >= startDate && d < endDate;
+    });
+    const yearPhotos = photos.filter(p => {
+      const d = new Date(p.date);
+      return d >= startDate && d < endDate;
+    });
+
+    const alivePlants = yearPlants.filter(p => p.status !== 'dead').length;
+    const survivalRate = yearPlants.length > 0 ? Math.round((alivePlants / yearPlants.length) * 100) : 0;
+    const totalWatering = yearRecords.filter(r => r.type === 'watering').length;
+    const totalFertilizing = yearRecords.filter(r => r.type === 'fertilizing').length;
+    const newPlants = plants.filter(p => {
+      const d = new Date(p.createdAt);
+      return d >= startDate && d < endDate;
+    }).length;
+
+    const monthlyData = {};
+    for (let i = 0; i < 12; i++) {
+      const monthKey = `${yr}-${String(i + 1).padStart(2, '0')}`;
+      monthlyData[monthKey] = {
+        careCount: 0,
+        photoCount: 0,
+        newPlants: 0
+      };
+    }
+
+    yearRecords.forEach(record => {
+      const d = new Date(record.date);
+      const monthKey = `${yr}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (monthlyData[monthKey]) {
+        monthlyData[monthKey].careCount++;
+      }
+    });
+
+    yearPhotos.forEach(photo => {
+      const d = new Date(photo.date);
+      const monthKey = `${yr}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (monthlyData[monthKey]) {
+        monthlyData[monthKey].photoCount++;
+      }
+    });
+
+    plants.forEach(plant => {
+      const d = new Date(plant.createdAt);
+      if (d.getFullYear() === yr) {
+        const monthKey = `${yr}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (monthlyData[monthKey]) {
+          monthlyData[monthKey].newPlants++;
+        }
+      }
+    });
+
+    return {
+      year: yr,
+      careCount: yearRecords.length,
+      photoCount: yearPhotos.length,
+      survivalRate,
+      newPlants,
+      monthlyData
+    };
+  };
+
+  const currentYearData = buildYearSummary(targetYear);
+  const lastYearData = buildYearSummary(compareYear);
+
+  res.json({
+    currentYear: currentYearData,
+    lastYear: lastYearData,
+    generatedAt: new Date().toISOString()
   });
 });
 

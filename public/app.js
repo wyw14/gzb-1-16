@@ -80,6 +80,10 @@ const api = {
   async getYearlyReportData(year) {
     const res = await fetch(`${API_BASE}/api/report/yearly?year=${year}`);
     return res.json();
+  },
+  async getYearlyComparison(year) {
+    const res = await fetch(`${API_BASE}/api/report/yearly-comparison?year=${year}`);
+    return res.json();
   }
 };
 
@@ -1454,6 +1458,10 @@ const YearlyReport = {
     const loading = ref(false);
     const trendChart = ref(null);
     const typeChart = ref(null);
+    const compareMode = ref(false);
+    const comparisonData = ref(null);
+    const compareChart = ref(null);
+    const compareCareChart = ref(null);
 
     const years = computed(() => {
       const current = new Date().getFullYear();
@@ -1464,6 +1472,9 @@ const YearlyReport = {
       try {
         loading.value = true;
         reportData.value = await api.getYearlyReportData(selectedYear.value);
+        if (compareMode.value) {
+          await loadComparison();
+        }
         nextTick(() => {
           renderCharts();
         });
@@ -1471,6 +1482,135 @@ const YearlyReport = {
         ElMessage.error('加载报告数据失败');
       } finally {
         loading.value = false;
+      }
+    };
+
+    const loadComparison = async () => {
+      try {
+        comparisonData.value = await api.getYearlyComparison(selectedYear.value);
+        nextTick(() => {
+          renderCompareCharts();
+        });
+      } catch (e) {
+        ElMessage.error('加载对比数据失败');
+      }
+    };
+
+    const toggleCompareMode = async () => {
+      compareMode.value = !compareMode.value;
+      if (compareMode.value) {
+        await loadComparison();
+      } else {
+        comparisonData.value = null;
+        if (compareChart.value) {
+          compareChart.value.destroy();
+          compareChart.value = null;
+        }
+        if (compareCareChart.value) {
+          compareCareChart.value.destroy();
+          compareCareChart.value = null;
+        }
+      }
+    };
+
+    const renderCompareCharts = () => {
+      if (!comparisonData.value) return;
+      const cur = comparisonData.value.currentYear;
+      const last = comparisonData.value.lastYear;
+      const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+      const summaryCtx = document.getElementById('compareSummaryChart');
+      if (summaryCtx) {
+        if (compareChart.value) compareChart.value.destroy();
+        compareChart.value = new Chart(summaryCtx, {
+          type: 'bar',
+          data: {
+            labels: ['养护次数', '照片数', '存活率(%)', '新增植物数'],
+            datasets: [
+              {
+                label: `${last.year}年`,
+                data: [last.careCount, last.photoCount, last.survivalRate, last.newPlants],
+                backgroundColor: 'rgba(255, 152, 0, 0.7)',
+                borderColor: 'rgba(255, 152, 0, 1)',
+                borderWidth: 1
+              },
+              {
+                label: `${cur.year}年`,
+                data: [cur.careCount, cur.photoCount, cur.survivalRate, cur.newPlants],
+                backgroundColor: 'rgba(76, 175, 80, 0.7)',
+                borderColor: 'rgba(76, 175, 80, 1)',
+                borderWidth: 1
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { position: 'top' }
+            },
+            scales: {
+              y: { beginAtZero: true }
+            }
+          }
+        });
+      }
+
+      const careCtx = document.getElementById('compareCareChart');
+      if (careCtx) {
+        if (compareCareChart.value) compareCareChart.value.destroy();
+        const curMonthlyKeys = Object.keys(cur.monthlyData).sort();
+        const lastMonthlyKeys = Object.keys(last.monthlyData).sort();
+        compareCareChart.value = new Chart(careCtx, {
+          type: 'line',
+          data: {
+            labels: months,
+            datasets: [
+              {
+                label: `${last.year}年 养护次数`,
+                data: lastMonthlyKeys.map(k => last.monthlyData[k].careCount),
+                borderColor: 'rgba(255, 152, 0, 1)',
+                backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                fill: false,
+                tension: 0.4,
+                borderDash: [5, 5]
+              },
+              {
+                label: `${cur.year}年 养护次数`,
+                data: curMonthlyKeys.map(k => cur.monthlyData[k].careCount),
+                borderColor: 'rgba(76, 175, 80, 1)',
+                backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                fill: true,
+                tension: 0.4
+              },
+              {
+                label: `${last.year}年 照片数`,
+                data: lastMonthlyKeys.map(k => last.monthlyData[k].photoCount),
+                borderColor: 'rgba(33, 150, 243, 0.6)',
+                backgroundColor: 'rgba(33, 150, 243, 0.05)',
+                fill: false,
+                tension: 0.4,
+                borderDash: [5, 5]
+              },
+              {
+                label: `${cur.year}年 照片数`,
+                data: curMonthlyKeys.map(k => cur.monthlyData[k].photoCount),
+                borderColor: 'rgba(156, 39, 176, 1)',
+                backgroundColor: 'rgba(156, 39, 176, 0.1)',
+                fill: true,
+                tension: 0.4
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { position: 'top' }
+            },
+            scales: {
+              y: { beginAtZero: true }
+            }
+          }
+        });
       }
     };
 
@@ -1563,6 +1703,35 @@ const YearlyReport = {
       }
     };
 
+    const exportComparisonJSON = () => {
+      if (!comparisonData.value) {
+        ElMessage.warning('请先开启对比模式加载数据');
+        return;
+      }
+      const blob = new Blob([JSON.stringify(comparisonData.value, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `plant-care-comparison-${selectedYear.value}.json`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      ElMessage.success('对比数据导出成功');
+    };
+
+    const getDiffText = (current, last) => {
+      const diff = current - last;
+      if (diff > 0) return `↑ +${diff}`;
+      if (diff < 0) return `↓ ${diff}`;
+      return '- 持平';
+    };
+
+    const getDiffClass = (current, last) => {
+      const diff = current - last;
+      if (diff > 0) return 'compare-diff-up';
+      if (diff < 0) return 'compare-diff-down';
+      return 'compare-diff-same';
+    };
+
     const getDifficultyLabel = (difficulty) => {
       const opt = difficultyOptions.find(o => o.value === difficulty);
       return opt ? opt.label : difficulty;
@@ -1586,8 +1755,14 @@ const YearlyReport = {
       years,
       reportData,
       loading,
+      compareMode,
+      comparisonData,
       loadReport,
+      toggleCompareMode,
       exportReport,
+      exportComparisonJSON,
+      getDiffText,
+      getDiffClass,
       getDifficultyLabel,
       getStatusLabel,
       formatDate
@@ -1601,13 +1776,114 @@ const YearlyReport = {
           <el-select v-model="selectedYear" style="width: 150px; margin-right: 12px;">
             <el-option v-for="year in years" :key="year" :label="year + '年'" :value="year" />
           </el-select>
+          <el-button :type="compareMode ? 'warning' : 'default'" @click="toggleCompareMode">
+            <el-icon><Switch /></el-icon> {{ compareMode ? '退出对比' : '对比去年' }}
+          </el-button>
           <el-button type="success" @click="loadReport" :loading="loading">
             <el-icon><Refresh /></el-icon> 刷新
           </el-button>
           <el-button type="primary" @click="exportReport">
             <el-icon><Download /></el-icon> 导出JSON
           </el-button>
+          <el-button v-if="compareMode" type="primary" @click="exportComparisonJSON">
+            <el-icon><Download /></el-icon> 导出对比JSON
+          </el-button>
         </div>
+      </div>
+
+      <div v-if="compareMode && comparisonData" class="compare-section">
+        <div class="compare-header">
+          <h2 class="report-title">🔄 {{ comparisonData.currentYear.year }} vs {{ comparisonData.lastYear.year }} 年度对比</h2>
+        </div>
+
+        <div class="compare-summary-grid">
+          <div class="compare-card">
+            <div class="compare-card-title">养护次数</div>
+            <div class="compare-card-values">
+              <div class="compare-year-block">
+                <span class="compare-year-label">{{ comparisonData.lastYear.year }}年</span>
+                <span class="compare-year-value last-year">{{ comparisonData.lastYear.careCount }}</span>
+              </div>
+              <div class="compare-vs">VS</div>
+              <div class="compare-year-block">
+                <span class="compare-year-label">{{ comparisonData.currentYear.year }}年</span>
+                <span class="compare-year-value current-year">{{ comparisonData.currentYear.careCount }}</span>
+              </div>
+            </div>
+            <div class="compare-diff" :class="getDiffClass(comparisonData.currentYear.careCount, comparisonData.lastYear.careCount)">
+              {{ getDiffText(comparisonData.currentYear.careCount, comparisonData.lastYear.careCount) }}
+            </div>
+          </div>
+
+          <div class="compare-card">
+            <div class="compare-card-title">照片数</div>
+            <div class="compare-card-values">
+              <div class="compare-year-block">
+                <span class="compare-year-label">{{ comparisonData.lastYear.year }}年</span>
+                <span class="compare-year-value last-year">{{ comparisonData.lastYear.photoCount }}</span>
+              </div>
+              <div class="compare-vs">VS</div>
+              <div class="compare-year-block">
+                <span class="compare-year-label">{{ comparisonData.currentYear.year }}年</span>
+                <span class="compare-year-value current-year">{{ comparisonData.currentYear.photoCount }}</span>
+              </div>
+            </div>
+            <div class="compare-diff" :class="getDiffClass(comparisonData.currentYear.photoCount, comparisonData.lastYear.photoCount)">
+              {{ getDiffText(comparisonData.currentYear.photoCount, comparisonData.lastYear.photoCount) }}
+            </div>
+          </div>
+
+          <div class="compare-card">
+            <div class="compare-card-title">存活率</div>
+            <div class="compare-card-values">
+              <div class="compare-year-block">
+                <span class="compare-year-label">{{ comparisonData.lastYear.year }}年</span>
+                <span class="compare-year-value last-year">{{ comparisonData.lastYear.survivalRate }}%</span>
+              </div>
+              <div class="compare-vs">VS</div>
+              <div class="compare-year-block">
+                <span class="compare-year-label">{{ comparisonData.currentYear.year }}年</span>
+                <span class="compare-year-value current-year">{{ comparisonData.currentYear.survivalRate }}%</span>
+              </div>
+            </div>
+            <div class="compare-diff" :class="getDiffClass(comparisonData.currentYear.survivalRate, comparisonData.lastYear.survivalRate)">
+              {{ getDiffText(comparisonData.currentYear.survivalRate, comparisonData.lastYear.survivalRate) }}
+            </div>
+          </div>
+
+          <div class="compare-card">
+            <div class="compare-card-title">新增植物数</div>
+            <div class="compare-card-values">
+              <div class="compare-year-block">
+                <span class="compare-year-label">{{ comparisonData.lastYear.year }}年</span>
+                <span class="compare-year-value last-year">{{ comparisonData.lastYear.newPlants }}</span>
+              </div>
+              <div class="compare-vs">VS</div>
+              <div class="compare-year-block">
+                <span class="compare-year-label">{{ comparisonData.currentYear.year }}年</span>
+                <span class="compare-year-value current-year">{{ comparisonData.currentYear.newPlants }}</span>
+              </div>
+            </div>
+            <div class="compare-diff" :class="getDiffClass(comparisonData.currentYear.newPlants, comparisonData.lastYear.newPlants)">
+              {{ getDiffText(comparisonData.currentYear.newPlants, comparisonData.lastYear.newPlants) }}
+            </div>
+          </div>
+        </div>
+
+        <el-row :gutter="20" style="margin-top: 24px;">
+          <el-col :lg="12" :md="24">
+            <div class="chart-container">
+              <h3 class="chart-title">📊 关键指标并排对比</h3>
+              <canvas id="compareSummaryChart" height="300"></canvas>
+            </div>
+          </el-col>
+          <el-col :lg="12" :md="24">
+            <div class="chart-container">
+              <h3 class="chart-title">📈 月度养护/照片趋势对比</h3>
+              <canvas id="compareCareChart" height="300"></canvas>
+            </div>
+          </el-col>
+        </el-row>
       </div>
 
       <div v-loading="loading">
